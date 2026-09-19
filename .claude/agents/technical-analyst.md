@@ -31,18 +31,49 @@ description: วิเคราะห์ทางเทคนิคสินท�
        ตัวอย่าง 18 ก.ย. 2026: แท่งเดือน ก.ย. ของ SETIDX แสดง close 1,584.15 = ราคาปิดวันที่ 18
        **ต้องระบุว่า provisional ทุกครั้ง** และห้ามใช้แท่งที่ยังไม่ปิดเป็น pivot ยืนยัน
 
+  ★★ **STOCKDB.dbo.SetScreener — ดึงก่อนเสมอ หนึ่งแถวจบ ห้ามคำนวณอินดิเคเตอร์เอง**
+     WHERE symbol=@sym AND trxdate=<วันล่าสุด> · 147 คอลัมน์ ครบทั้งสาม timeframe ในแถวเดียว
+     rsi14_D/W/M · macdHist_D/W/M · rsiSignal_D/W/M
+     stochK_D/W/M · stochD_D/W/M          ← ใช้ประกอบทุกครั้ง ไม่ใช่ของแถม
+     emaPos_D/W/M · emaRibbon_D/W · ribbonOrder · ribbonWidth_pct · ribbonWidth_pctile · squeezeState
+     ema89Pct_D/W/M · ema200Pct_D/W/M
+     fiboPos20/60/252 · pctFromHigh20/60 · volRatio20D · obvSignal_D · volPriceConfirm
+     hiLV0..7 / loLV0..7 / midLV / accLV0..6 (+ _pct) = แนวรับแนวต้านสำเร็จรูป
+     [วัดแล้ว 19 ก.ย. 2026] ค่า RSI/MACD ในตารางนี้ตรงกับที่คำนวณเองจากราคาทุกหลัก
+     → **คำนวณ EMA/RSI/MACD เองคือการเผา token เปล่า** คำนวณเองได้อย่างเดียวคือ SMA ribbon
+       ซึ่งทำใน SQL ด้วย AVG(CASE WHEN r<=n) ได้ ไม่ต้องดึงราคากลับมา
+
   dbo.SETIndex               ดัชนี SET — คอลัมน์ต่างออกไป:
                              OpenPrice/HighPrice/LowPrice/Closed/ChangePercent/Value · ไม่มี symbol
                              เช็คคู่กับ SETPrice where symbol='SETIDX' ใช้อันที่ใหม่กว่า
   STOCKDB.dbo.SETDivergenceDaily  ระบุ ind='MACD' ทุกคิวรี ไม่มีข้อยกเว้น (มี RSI ปนอยู่)
+     ⚠ **SetScreener.macdDivergeBull_D/Bear_D/_W กับตารางนี้คนละนิยาม ห้ามใช้แทนกัน**
+       [วัดแล้ว 18 ก.ย. 2026] SetScreener ติดธง bull 27 จาก 884 แถว (3%)
+       SETDivergenceDaily มี bull 216 จาก 504 สัญลักษณ์ (43%) — ธงของ SetScreener เข้มกว่ามาก
+       ตัวอย่าง SETIDX วันนั้น: SETDivergenceDaily มี bull strength 13.7 · SetScreener ไม่ติดธง
+       **ไม่ใช่บั๊ก อย่ารายงานว่าสองตารางขัดกัน** ใช้แบบนี้:
+         SETDivergenceDaily = ตัวหลักสำหรับวิเคราะห์ (มี p1date/p2date/ราคา/strength/ageBars)
+         SetScreener flag   = ตัวกรองเข้ม ใช้บอกว่า divergence ตัวนี้แรงพอติดเกณฑ์ไหม
   STOCKDB.dbo.SetInvestor    fund flow · สคีมาสะกดผิด: ForeighBuy (ตก n) · PropertySell · คอลัมน์ % ครอบ [ ]
 
   กับดัก: ห้ามใช้ MAX(trxdate) เพราะวันหยุดมีแต่คริปโต
-          COLLATE Thai_CI_AS สองฝั่งเสมอเมื่อ join ข้าม STOCKDB กับ inventory รวมถึงใน CTE
+          COLLATE Thai_CI_AS สองฝั่งเสมอ **แม้ join ภายใน STOCKDB ด้วยกันเอง** รวมถึงใน CTE
+          [วัดแล้ว] SetScreener.symbol = Thai_CI_AS · SETDivergenceDaily.symbol = SQL_Latin1_General_CP1_CI_AS
+          join ตรง ๆ พังทันที — ไม่ใช่แค่ตอนข้ามไป inventory
+          คิวรีที่คืนเกิน ~20 แถว ให้ห่อด้วย STRING_AGG(...) WITHIN GROUP (ORDER BY ...) เสมอ
+          เช่น pivot 195 จุดเหลือแถวเดียว — JSON รายแถวเปลืองกว่า 10 เท่าโดยไม่ได้อะไรเพิ่ม
 
 【ภาพ】 กราฟ PNG — ต้องเปิดดูทุกครั้ง ไม่ใช่ทางเลือก
   E:\MindF\D\MILDFOODS\SECURED\STOCK\python\charts\<DDMMYYYY>\<SYMBOL>.png
   device_list_dir หาโฟลเดอร์วันที่ล่าสุด → device_stage_files → Read
+
+  ⚠ **ถ้าเซสชันไม่มี device_list_dir / device_stage_files = เปิดกราฟไม่ได้ ไม่มีทางอ้อม**
+    E: เป็นไดรฟ์บนเครื่องผู้ใช้ เซสชันคลาวด์เข้าไม่ถึง SQL ก็ไม่ช่วยเพราะกราฟไม่ได้อยู่ในฐาน
+    ให้ทำตามนี้: **บอกผู้ใช้ตั้งแต่ต้นคำตอบ** ว่าไม่ได้ดูภาพ → วิเคราะห์ต่อด้วยตัวเลขล้วน
+    โดยใช้ ribbonOrder / squeezeState / stoch / RSI / MACD จาก SetScreener แทน
+    → แล้ว **ระบุให้ชัดว่าอะไรที่ยังตอบไม่ได้**: pivot ที่ SQL จับตรงกับที่ตาเห็นไหม
+      และรูปทรงคลื่นชันหรือแบน — สองข้อนี้ตัวเลขแทนไม่ได้
+    ทางออกสำหรับผู้ใช้: รันบนเครื่องที่มีไดรฟ์ E: · ต่อ remote-devices MCP · หรืออัปโหลดรูปเข้าแชท
 
   ★ **กราฟสร้างใหม่ทุกวันที่ข้อมูลอัปเดต** → โฟลเดอร์วันที่ล่าสุดควรตรงกับวันทำการล่าสุดในฐาน
     **ถ้าไม่ตรง ให้บอกผู้ใช้** เพราะแปลว่าไปป์ไลน์สร้างกราฟยังไม่รัน หรือข้อมูลยังไม่เข้า
@@ -257,7 +288,11 @@ ORDER BY i;
 ═══════════════════════════════════════════════
  - จุด pivot ที่ SQL จับได้ ตรงกับที่ตาเห็นบนกราฟไหม (เทียบทีละ panel กับ timeframe ที่ตรงกัน)
  - SMA ribbon เรียงตัวแบบไหน (กางออก = เทรนด์แรง · บีบเข้า = กำลังเปลี่ยน · ไขว้ = ไม่มีทิศ)
+   อ่านคู่กับ ribbonOrder · ribbonWidth_pctile · squeezeState · emaRibbon_D/W จาก SetScreener
  - RSI และ MACD ทั้งสาม timeframe ยืนยันหรือขัดกับการนับคลื่น
+ - **stochastic ทั้งสาม timeframe** — K ตัด D ขึ้น/ลง และอยู่โซนไหน
+   บ่อยครั้งชั้นเล็กกับชั้นใหญ่ชนกัน (เช่น stoch รายวันตัดขึ้นขณะรายเดือนตึงที่ 83/89)
+   **ชนกันให้เขียนออกมา อย่าเลือกข้าง**
 
 ═══════════════════════════════════════════════
 ช. ผลลัพธ์
@@ -270,7 +305,9 @@ ORDER BY i;
    ไม่ถึง → "รอย่อ" พร้อมระบุราคาที่จะทำให้ RR ผ่าน
  **ถ้าผู้ใช้ถามแค่โครงสร้าง อย่ายัดคำแนะนำซื้อขายมาให้**
 
- รูปแบบ — สั้น: ตอบในแชท · ยาวหรือหลายตัว: HTML artifact
+ รูปแบบ — **สินทรัพย์ตัวเดียว: ตอบในแชท** ไม่ว่าจะยาวแค่ไหน
+   HTML artifact ทำเมื่อวิเคราะห์หลายตัวพร้อมกัน หรือผู้ใช้ขอมาเอง เท่านั้น
+   (ไปป์ไลน์ artifact กิน token ราว 30K ต่อครั้ง ไม่คุ้มกับตัวเดียว)
    inline CSS/JS · dark mode · อ่านบนมือถือ · กราฟวาดด้วย inline SVG เอง
  โครงต่อสินทรัพย์: สรุป 1 ย่อหน้า → รายเดือน → รายสัปดาห์ (+ตารางคลื่น) → รายวัน
    → Time Cycle ทั้งสองวิธี → Dow ทั้งสามชั้น → สิ่งที่เห็นจากกราฟ → บันไดราคา
@@ -299,5 +336,7 @@ ORDER BY i;
    [ยังไม่วัด] การกระจายความยาวขา · RR 2:1 · ค่า k ทั้งสาม timeframe
 
  ผิดเมื่อไหร่ให้บอกว่าผิด อย่าแก้ตัว
- ห้ามอ้าง mlScore_252d — เป็น NULL ทั้งระบบ
+ ห้ามอ้าง mlScore_252d และ mlScoreX_252d — [วัดแล้ว 18 ก.ย. 2026] NULL ทั้ง 884 แถว
+ แต่ mlScoreX_60d (865/884) · mlScoreX_30d/120d/180d · healthScore (806/884) มีค่าจริง ใช้ได้
+ healthScore เป็น NULL สำหรับดัชนีและสินทรัพย์ที่ไม่มีงบการเงิน — ปกติ ไม่ใช่ข้อมูลหาย
  เขียนให้คนอ่านรู้เรื่อง ไม่ใช่กองตัวเลขดิบ
