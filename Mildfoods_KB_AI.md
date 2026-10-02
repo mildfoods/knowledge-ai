@@ -1121,6 +1121,16 @@ Maps a network share (`\\nas`), copies Excel files locally, then `OPENROWSET`/AC
 
 **🔴 SECURITY GOTCHA**: this SP has network-share credentials hardcoded in plaintext directly inside `xp_cmdshell` (`net use` with a real user/password). Should be flagged to infra/security to move to a credential store. Actual credential value intentionally NOT reproduced in this document.
 
+### 11.1.1 Checking current cash — `cash` table (Cash Management "PURCHASING POWER" sheet) `[VERIFIED 2026-10-02, partial column mapping]`
+
+`inventory.dbo.cash` is imported with broken headers (`F2`…`F26`, first column named `PURCHASING POWER` holds the snapshot date, roughly weekly). Mapping confirmed by arithmetic / header row: `F2`=A (EXIM), `[45,313#00]`=B (KB_MF, OD), `F4`=C (KB584), `F5`=D (KB577, OD), `F6`=E (UOB, OD), `F7`=G (KB993), `F8`=ACC MM (text), **`F13` = sum of positive MF accounts (F2+F4+F7)** — verified on 2 dates. `F18`–`F20` = B/D/E OD interest, `F22` = USD rate. `F9`–`F12`, `F14`–`F16` NOT yet identified (`F12` likely total purchasing power) `[OPEN QUESTION]`.
+
+```sql
+SELECT TOP 1 * FROM inventory.dbo.cash ORDER BY [PURCHASING POWER] DESC
+```
+
+Snapshot 2026-09-29: positive cash 2,195,961.92 (A 1,623,519.96 + C 140,127.32 + G 168,805.60 + MM 263,509.04); OD drawn -8,866,177.07 (B -4,380,190.89, D -24,868.08, E -4,461,118.10); net -6,670,215.15. This is fresher than `BalanceSheet` `Cash(MF)`/`Cash(MM)` (from `ACCT`, month-end running balance; on 2026-10-02 `ACCT_D` last doc 08-31, `ACCT_E` 09-07, and `Cash(MM)` unchanged since 2025-12 → stale). Negative `Cash(MF)` in `BalanceSheet` = OD accounts netted against positive balances.
+
 ### 11.2 `Create_TotalAcct` / `Create_TotalAcct_check`
 
 `Create_TotalAcct` unions ACCT_A through ACCT_G into one `TotalAcct` table, building a `join` key = `{acc code}-{month}-{year}-{prefix}`, prefix depending on work code type:
